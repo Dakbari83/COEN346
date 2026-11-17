@@ -1,0 +1,99 @@
+COEN 346 - Programming Assignment 2
+Sample session between the console client and the file sharing server
+=====================================================================
+
+Lines starting with ">" are what the user types in the client. The line below each one
+is the server's reply, exactly as the client prints it after "Response from server: ".
+
+Rules for the replies
+- The ERROR messages given in the handout must be sent exactly as written.
+- A successful CREATE, WRITE or DELETE must start with "SUCCESS". The rest of the line
+  is up to you; the messages below are only an example.
+- READ replies with the contents of the file and nothing else.
+- LIST replies with the file names separated by commas, or with an empty line if there
+  are no files.
+- Any other problem (unknown command, missing parameter) gets a line starting with "ERROR:".
+
+The session below starts from an empty file system with the default settings
+(BLOCKSIZE = 128, MAXFILES = 5, MAXBLOCKS = 10). The metadata fits in block 0, so
+9 blocks (1152 bytes) are available for file data.
+
+
+1. Creating files
+-----------------
+> LIST
+                                      (empty line: no files yet)
+> CREATE notes
+SUCCESS: File 'notes' created.
+> CREATE todo
+SUCCESS: File 'todo' created.
+> CREATE averylongname
+ERROR: filename too large             (13 characters; the maximum is 11)
+> LIST
+notes,todo
+
+2. Writing and reading
+----------------------
+> WRITE notes Meeting at 10 in room H-929
+SUCCESS: File 'notes' written.        (the content is everything after the filename, spaces included)
+> READ notes
+Meeting at 10 in room H-929
+> READ todo
+                                      (empty line: the file exists but is empty)
+> WRITE notes Moved to 11
+SUCCESS: File 'notes' written.
+> READ notes
+Moved to 11                           (WRITE replaces the old content; no bytes of it remain)
+
+3. Errors
+---------
+> READ report
+ERROR: file report does not exist
+> WRITE report Hello
+ERROR: file report does not exist
+> WRITE todo xxxx...x                 (1200 characters: more than the 1152 free bytes)
+ERROR: file too large
+> READ todo
+                                      (still empty: a failed WRITE changes nothing)
+> HELLO
+ERROR: Unknown command.
+> READ
+ERROR: missing filename               (any message starting with "ERROR:" is accepted)
+
+4. Deleting
+-----------
+> DELETE notes
+SUCCESS: File 'notes' deleted.
+> READ notes
+ERROR: file notes does not exist
+> DELETE notes
+ERROR: file notes does not exist
+> LIST
+todo
+
+5. Leaving
+----------
+> exit
+                                      (the client closes the connection; the server keeps
+                                       running and waits for other clients)
+
+
+Testing with many clients
+=========================
+The FileClient project also contains StressTestClient, which starts many clients at once
+against your server. It needs CREATE, WRITE, READ and LIST to work. Start your server
+with a fresh file system, then run StressTestClient (in IntelliJ, or from the command line):
+
+    java ca.concordia.StressTestClient [clients] [rounds] [writeRatio] [pauseMs] [host] [port]
+    default:                            100       10       0.2          50        localhost 12345
+
+For example, "200 10 0.3" starts 200 clients that each send 10 requests, 30% of them writes.
+All clients read and write the same file, called "shared". The test checks that:
+- every client gets a reply to every request (no timeouts, no dropped connections);
+- bad requests get an ERROR and the client can keep going;
+- no client ever reads a file that is only partly written (a "torn read"). Every write puts
+  200 copies of one letter in the file, so a correct read is always 200 identical letters.
+
+The test prints PASS only if all of these hold. With the single-threaded starter server,
+most clients time out because they wait for the clients ahead of them. A server with
+threads but no synchronization will report torn reads.
